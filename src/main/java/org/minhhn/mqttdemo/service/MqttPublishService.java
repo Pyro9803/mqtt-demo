@@ -2,6 +2,7 @@ package org.minhhn.mqttdemo.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.PostConstruct;
 import org.eclipse.paho.client.mqttv3.IMqttClient;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
@@ -11,34 +12,87 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 @Service
 public class MqttPublishService {
 
     private static final Logger log = LoggerFactory.getLogger(MqttPublishService.class);
+    private static final String TOPIC = "temperature";
     private final ObjectMapper mapper = new ObjectMapper();
-
+    private final ScheduledExecutorService reconnectExecutor = Executors.newSingleThreadScheduledExecutor();
+    private final AtomicBoolean connected = new AtomicBoolean(false);
+    
     private final IMqttClient mqttClient;
 
     public MqttPublishService(IMqttClient mqttClient) {
         this.mqttClient = mqttClient;
     }
+    
+    @PostConstruct
+    public void init() {
+        reconnectExecutor.scheduleAtFixedRate(this::checkConnection, 3, 3, TimeUnit.SECONDS);
+    }
+    
+    private void checkConnection() {
+        try {
+            if (!mqttClient.isConnected()) {
+                log.warn("Publisher lost connection to MQTT broker. Attempting to reconnect...");
+                try {
+                    mqttClient.connect();
+                    connected.set(true);
+                    log.info("Publisher reconnected to MQTT broker");
+                } catch (MqttException e) {
+                    connected.set(false);
+                    log.error("Publisher failed to reconnect to MQTT broker: {}", e.getMessage());
+                }
+            } else {
+                connected.set(true);
+            }
+        } catch (Exception e) {
+            log.error("Error in publisher connection monitor: {}", e.getMessage());
+        }
+    }
 
     @Scheduled(fixedRate = 5000)
     public void publish() {
+        Temperature temperatureData = new Temperature(15 + Math.random() * 15);
         try {
-            if (!mqttClient.isConnected()) {
-                mqttClient.connect();
-            }
-            Temperature temperatureData = new Temperature(15 + Math.random() * 15);
+            double formattedTemp = Math.round(temperatureData.getTemp() * 100.0) / 100.0;
+            temperatureData = new Temperature(formattedTemp);
+            
             String payload = mapper.writeValueAsString(temperatureData);
-
+            log.debug("Generated temperature: {}°C", formattedTemp);
+            
+            if (!mqttClient.isConnected()) {
+                try {
+                    log.warn("Publisher not connected. Attempting to reconnect...");
+                    mqttClient.connect();
+                    connected.set(true);
+                    log.info("Publisher reconnected successfully");
+                } catch (MqttException e) {
+                    connected.set(false);
+                    log.error("Publisher failed to connect: {}", e.getMessage());
+                    return;
+                }
+            }
+            
             MqttMessage message = new MqttMessage(payload.getBytes());
             message.setQos(1);
             message.setRetained(true);
-
-            mqttClient.publish("temperature", message);
-        } catch (JsonProcessingException | MqttException e) {
-            log.error(e.getMessage());
+            
+            mqttClient.publish(TOPIC, message);
+            log.info("Published temperature: {}°C", formattedTemp);
+        } catch (JsonProcessingException e) {
+            log.error("Failed to serialize temperature data: {}", e.getMessage());
+        } catch (MqttException e) {
+            connected.set(false);
+            log.error("Failed to publish temperature data: {}", e.getMessage());
+        } catch (Exception e) {
+            log.error("Unexpected error in publisher: {}", e.getMessage());
         }
     }
 }
