@@ -11,6 +11,7 @@ import java.util.UUID;
 
 @Configuration
 public class MqttBrokerConfig {
+
     @Bean
     public IMqttClient mqttClient() throws MqttException {
         String publisherId = UUID.randomUUID().toString();
