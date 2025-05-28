@@ -2,6 +2,8 @@ package org.minhhn.mqttdemo.controller;
 
 import org.minhhn.mqttdemo.service.MqttPublishService;
 import org.minhhn.mqttdemo.service.MqttSubscribeService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -9,6 +11,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/sensor/temperature")
 public class MqttController {
+
+    private static final Logger log = LoggerFactory.getLogger(MqttController.class);
 
     private final MqttPublishService publisher;
     private final MqttSubscribeService subscriber;
@@ -24,7 +28,7 @@ public class MqttController {
             publisher.publish();
             return "Message successfully publish";
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error(e.getMessage());
             return "Failed to publish message: " + e.getMessage();
         }
     }
@@ -35,7 +39,7 @@ public class MqttController {
             subscriber.subscribe();
             return "Subscriber receiving message from publisher...";
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error(e.getMessage());
             return "Failed to subscribe message: " + e.getMessage();
         }
     }
@@ -46,7 +50,7 @@ public class MqttController {
             subscriber.unsubscribe();
             return "Subscriber unsubscribe successfully";
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error(e.getMessage());
             return "Failed to unsubscribe message..." +
                     "Please check again!";
         }

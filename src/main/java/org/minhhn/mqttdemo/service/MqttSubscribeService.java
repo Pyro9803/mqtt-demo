@@ -2,12 +2,14 @@ package org.minhhn.mqttdemo.service;
 
 import org.eclipse.paho.client.mqttv3.IMqttClient;
 import org.eclipse.paho.client.mqttv3.MqttException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.web.bind.annotation.PostMapping;
 
 @Service
 public class MqttSubscribeService {
 
+    private static final Logger log = LoggerFactory.getLogger(MqttSubscribeService.class);
     private final IMqttClient mqttClient;
 
     public MqttSubscribeService(IMqttClient mqttClient) {
@@ -25,11 +27,10 @@ public class MqttSubscribeService {
                 System.out.println("Received message: " + payload);
             });
         } catch (MqttException e) {
-            e.printStackTrace();
+            log.error(e.toString());
         }
     }
 
-    @PostMapping("/unsubscribe")
     public void unsubscribe() {
         try {
             if (mqttClient.isConnected()) {
