@@ -4,7 +4,6 @@ import org.minhhn.mqttdemo.service.MqttPublishService;
 import org.minhhn.mqttdemo.service.MqttSubscribeService;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -20,9 +19,9 @@ public class MqttController {
     }
 
     @PostMapping("/publish")
-    public String publish(String topic, String message) {
+    public String publish() {
         try {
-            publisher.publish(topic, message);
+            publisher.publish();
             return "Message successfully publish";
         } catch (Exception e) {
             e.printStackTrace();
@@ -31,13 +30,25 @@ public class MqttController {
     }
 
     @PostMapping("/subscribe")
-    public String subscribe(@RequestParam String topic) {
+    public String subscribe() {
         try {
-            subscriber.subscribeToTopic(topic);
-            return "Subscriber received message";
+            subscriber.subscribe();
+            return "Subscriber receiving message from publisher...";
         } catch (Exception e) {
             e.printStackTrace();
             return "Failed to subscribe message: " + e.getMessage();
+        }
+    }
+
+    @PostMapping("/unsubscribe")
+    public String unsubscribe() {
+        try {
+            subscriber.unsubscribe();
+            return "Subscriber unsubscribe successfully";
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "Failed to unsubscribe message..." +
+                    "Please check again!";
         }
     }
 }
