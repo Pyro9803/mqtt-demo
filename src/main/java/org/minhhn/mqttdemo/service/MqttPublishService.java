@@ -34,7 +34,7 @@ public class MqttPublishService {
 
             MqttMessage message = new MqttMessage(payload.getBytes());
             message.setQos(1);
-            message.setRetained(false);
+            message.setRetained(true);
 
             mqttClient.publish("temperature", message);
         } catch (JsonProcessingException | MqttException e) {
