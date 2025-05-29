@@ -7,12 +7,9 @@ import org.eclipse.paho.client.mqttv3.*;
 import org.minhhn.mqttdemo.dto.Temperature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
@@ -21,12 +18,11 @@ public class MqttPublishService {
     private static final Logger log = LoggerFactory.getLogger(MqttPublishService.class);
     private static final String TOPIC = "temperature";
     private final ObjectMapper mapper = new ObjectMapper();
-    private final ScheduledExecutorService reconnectExecutor = Executors.newSingleThreadScheduledExecutor();
     private final AtomicBoolean connected = new AtomicBoolean(false);
     
     private final IMqttClient mqttClient;
 
-    public MqttPublishService(IMqttClient mqttClient, ClientHttpRequestFactoryBuilder<?> clientHttpRequestFactoryBuilder) {
+    public MqttPublishService(IMqttClient mqttClient) {
         this.mqttClient = mqttClient;
     }
     
