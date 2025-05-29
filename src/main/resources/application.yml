@@ -1,2 +1,8 @@
 server:
   port: 8903
+
+mqtt:
+  broker:
+    url: tcp://localhost:1883
+  client:
+    timeout: 30
