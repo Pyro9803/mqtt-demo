@@ -3,18 +3,16 @@ package org.minhhn.mqttdemo.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
-import org.eclipse.paho.client.mqttv3.IMqttClient;
-import org.eclipse.paho.client.mqttv3.MqttException;
-import org.eclipse.paho.client.mqttv3.MqttMessage;
+import org.eclipse.paho.client.mqttv3.*;
 import org.minhhn.mqttdemo.dto.Temperature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
@@ -28,33 +26,53 @@ public class MqttPublishService {
     
     private final IMqttClient mqttClient;
 
-    public MqttPublishService(IMqttClient mqttClient) {
+    public MqttPublishService(IMqttClient mqttClient, ClientHttpRequestFactoryBuilder<?> clientHttpRequestFactoryBuilder) {
         this.mqttClient = mqttClient;
     }
     
     @PostConstruct
     public void init() {
-        reconnectExecutor.scheduleAtFixedRate(this::checkConnection, 3, 3, TimeUnit.SECONDS);
-    }
-    
-    private void checkConnection() {
         try {
-            if (!mqttClient.isConnected()) {
-                log.warn("Publisher lost connection to MQTT broker. Attempting to reconnect...");
+            mqttClient.setCallback(new MqttCallback() {
+                @Override
+                public void connectionLost(Throwable cause) {
+                    connected.set(false);
+                    log.warn("MQTT publisher lost connection: {}", cause.getMessage());
+                    reconnect();
+                }
+
+                @Override
+                public void messageArrived(String topic, MqttMessage message) {
+
+                }
+
+                @Override
+                public void deliveryComplete(IMqttDeliveryToken token) {
+
+                }
+            });
+        } catch (Exception e) {
+            log.error("MQTT connection failed: {}", e.getMessage());
+            connected.set(false);
+            reconnect();
+        }
+    }
+
+    private void reconnect() {
+        new Thread(() -> {
+            while (!connected.get()) {
                 try {
+                    Thread.sleep(3000);
                     mqttClient.connect();
                     connected.set(true);
                     log.info("Publisher reconnected to MQTT broker");
                 } catch (MqttException e) {
-                    connected.set(false);
-                    log.error("Publisher failed to reconnect to MQTT broker: {}", e.getMessage());
+                    log.warn("Retrying MQTT connection... {}", e.getMessage());
+                } catch (InterruptedException e) {
+                    log.error("Error when creating Thread: {}", e.getMessage());
                 }
-            } else {
-                connected.set(true);
             }
-        } catch (Exception e) {
-            log.error("Error in publisher connection monitor: {}", e.getMessage());
-        }
+        }).start();
     }
 
     @Scheduled(fixedRate = 5000)

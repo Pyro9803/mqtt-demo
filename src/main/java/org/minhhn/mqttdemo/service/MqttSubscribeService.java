@@ -1,14 +1,11 @@
 package org.minhhn.mqttdemo.service;
 
 import jakarta.annotation.PostConstruct;
-import org.eclipse.paho.client.mqttv3.IMqttClient;
-import org.eclipse.paho.client.mqttv3.MqttException;
+import org.eclipse.paho.client.mqttv3.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
 public class MqttSubscribeService {
@@ -16,8 +13,7 @@ public class MqttSubscribeService {
     private static final Logger log = LoggerFactory.getLogger(MqttSubscribeService.class);
     private static final String TOPIC = "temperature";
     private final IMqttClient mqttClient;
-    private final ScheduledExecutorService reconnectExecutor = Executors.newSingleThreadScheduledExecutor();
-    private boolean isSubscribed = false;
+    private final AtomicBoolean connected = new AtomicBoolean(false);
 
     public MqttSubscribeService(IMqttClient mqttClient) {
         this.mqttClient = mqttClient;
@@ -25,65 +21,52 @@ public class MqttSubscribeService {
     
     @PostConstruct
     public void init() {
-        subscribe();
-        reconnectExecutor.scheduleAtFixedRate(this::checkConnectionAndResubscribe, 5, 5, TimeUnit.SECONDS);
-    }
-
-    public void subscribe() {
         try {
-            if (!mqttClient.isConnected()) {
-                log.warn("MQTT client not connected. Attempting to reconnect..");
-                try {
-                    mqttClient.connect();
-                } catch (MqttException e) {
-                    log.error("Failed to reconnect to MQTT broker: {}", e.getMessage());
-                    return;
+            mqttClient.setCallback(new MqttCallback() {
+                @Override
+                public void connectionLost(Throwable cause) {
+                    connected.set(false);
+                    log.warn("MQTT subscriber lost connection: {}", cause.getMessage());
+                    reconnectAndSubscribe();
                 }
-            }
 
-            mqttClient.subscribe(TOPIC, (s, message) -> {
-                String payload = new String(message.getPayload());
-                log.info("Received temperature: {}", payload);
+                @Override
+                public void messageArrived(String topic, MqttMessage message) {
+                    String payload = new String(message.getPayload());
+                    log.info("Received temperature: {}", payload);
+                }
+
+                @Override
+                public void deliveryComplete(IMqttDeliveryToken token) {
+
+                }
             });
-            isSubscribed = true;
-            log.info("Successfully subscribed to temperature topic");
-        } catch (MqttException e) {
-            log.error("Failed to subscribe: {}", e.getMessage());
-            isSubscribed = false;
+
+            connected.set(true);
+            mqttClient.subscribe(TOPIC, 1);
+            log.info("Subscriber connected and subscribed to MQTT broker");
+        } catch (Exception e) {
+            log.error("MQTT connection failed: {}", e.getMessage());
+            connected.set(false);
+            reconnectAndSubscribe();
         }
     }
 
-    public void unsubscribe() {
-        try {
-            if (!mqttClient.isConnected()) {
-                mqttClient.connect();
-            }
-
-            mqttClient.unsubscribe(TOPIC);
-            isSubscribed = false;
-            log.info("Successfully unsubscribed from temperature topic");
-        } catch (MqttException e) {
-            log.error("Failed to unsubscribe: {}", e.getMessage());
-        }
-    }
-    
-    private void checkConnectionAndResubscribe() {
-        try {
-            if (!mqttClient.isConnected()) {
-                log.warn("Connection to MQTT broker lost. Attempting to reconnect...");
+    public void reconnectAndSubscribe() {
+        new Thread(() -> {
+            while (!connected.get()) {
                 try {
+                    Thread.sleep(3000);
                     mqttClient.connect();
-                    log.info("Reconnected to MQTT broker");
-
-                    if (isSubscribed) {
-                        subscribe();
-                    }
+                    connected.set(true);
+                    mqttClient.subscribe(TOPIC, 1);
+                    log.info("Subscriber reconnected to MQTT broker");
                 } catch (MqttException e) {
-                    log.error("Failed to reconnect to MQTT broker: {}", e.getMessage());
+                    log.warn("Retrying MQTT connection... {}", e.getMessage());
+                } catch (InterruptedException e) {
+                    log.error("Error when creating Thread: {}", e.getMessage());
                 }
             }
-        } catch (Exception e) {
-            log.error("Error in connection monitor: {}", e.getMessage());
-        }
+        }).start();
     }
 }
